@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Shelter Finder</title>
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            overflow: hidden;
+        }
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Search bar */
+        #searchBox {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 9999;
+            background: white;
+            padding: 10px 14px;
+            border-radius: 8px;
+            width: 380px;
+            box-shadow: 0px 2px 6px rgba(0,0,0,0.25);
+            font-family: Arial;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        #searchBox input {
+            flex: 1;
+            padding: 6px;
+            border: none;
+            outline: none;
+            font-size: 14px;
+        }
+        #searchBox button {
+            padding: 6px 10px;
+            cursor: pointer;
+        }
+
+        /* Sidebar with results */
+        #resultsPanel {
+            position: absolute;
+            top: 100px;
+            right: 20px;
+            width: 300px;
+            max-height: 70%;
+            overflow-y: auto;
+            z-index: 9999;
+            background: white;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+            border-radius: 6px;
+            padding: 10px;
+            font-family: Arial;
+            display: none;
+        }
+
+        .resultItem {
+            padding: 10px;
+            border-bottom: 1px solid #ddd;
+            cursor: pointer;
+        }
+        .resultItem:hover {
+            background: #f0f0f0;
+        }
+
+        /* Loading popup */
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            z-index: 9999;
+            transform: translate(-50%, -50%);
+            background: rgba(255,255,255,0.9);
+            padding: 12px 20px;
+            border-radius: 6px;
+            font-family: Arial;
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="searchBox">
+        <input id="addressInput" type="text" placeholder="Search city or address..." />
+        <button onclick="searchAddress()">Search</button>
+    </div>
+
+    <div id="resultsPanel"></div>
+
+    <div id="loading">Loading...</div>
+
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script>
+        // Custom shelter icon
+        const shelterIcon = L.icon({
+            iconUrl: 'https://cdn-icons-png.flaticon.com/512/684/684908.png',
+            iconSize: [32, 32],
+            iconAnchor: [16, 32],
+            popupAnchor: [0, -28]
+        });
+
+        // Map initialization
+        const map = L.map('map').setView([41.0, -75.0], 6);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(map);
+
+        let shelterMarkers = [];
+
+        function clearMarkers() {
+            shelterMarkers.forEach(m => map.removeLayer(m));
+            shelterMarkers = [];
+        }
+
+        async function geocode(address) {
+            const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}`;
+            const res = await fetch(url);
+            const data = await res.json();
+            if (data.length === 0) return null;
+            return {
+                lat: parseFloat(data[0].lat),
+                lon: parseFloat(data[0].lon)
+            };
+        }
+
+        async function searchAddress() {
+            const address = document.getElementById('addressInput').value;
+            if (!address) return;
+
+            document.getElementById('loading').style.display = "block";
+
+            const location = await geocode(address);
+            if (!location) {
+                alert("Address not found.");
+                document.getElementById('loading').style.display = "none";
+                return;
+            }
+
+            map.setView([location.lat, location.lon], 12);
+
+            const backendUrl = `http://127.0.0.1:8000/nearest?lat=${location.lat}&lon=${location.lon}&limit=10`;
+            const response = await fetch(url);
+            const shelters = await response.json();
+
+            clearMarkers();
+
+            const panel = document.getElementById("resultsPanel");
+            panel.innerHTML = "";
+            panel.style.display = "block";
+
+            shelters.forEach((s, index) => {
+                const marker = L.marker([s.lat, s.lon], { icon: shelterIcon }).addTo(map);
+
+                marker.bindPopup(
+                    `<b>${s.name}</b><br>
+                    Distance: ${s.distance_km} km<br>
+                    Capacity: ${s.capacity}<br>
+                    Risk Level: ${s.risk_level}`
+                );
+
+                shelterMarkers.push(marker);
+
+                const div = document.createElement("div");
+                div.className = "resultItem";
+                div.innerHTML = `
+                    <b>${index + 1}. ${s.name}</b><br>
+                    ${s.distance_km} km away<br>
+                    Capacity: ${s.capacity}
+                `;
+                div.onclick = () => {
+                    map.setView([s.lat, s.lon], 15);
+                    marker.openPopup();
+                };
+
+                panel.appendChild(div);
+            });
+
+            document.getElementById('loading').style.display = "none";
+        }
+    </script>
+</body>
+</html>
