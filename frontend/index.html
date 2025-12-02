@@ -103,6 +103,20 @@
             font-size: 16px;
             font-family: Arial;
         }
+
+        .directionsBtn {
+            margin-top: 6px;
+            padding: 5px 10px;
+            background: #0066ff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .directionsBtn:hover {
+            background: #004dcc;
+        }
+
     </style>
 </head>
 
@@ -122,6 +136,10 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
     <script>
+
+        let userLocation = null;
+        let currentRoute = null;
+
     const shelterIcon = L.icon({
         iconUrl: 'https://cdn-icons-png.flaticon.com/512/684/684908.png',
         iconSize: [32, 32],
@@ -197,6 +215,7 @@
     const shelters = await response.json();
 
     // Show results on map + sidebar
+    userLocation = { lat: loc.lat, lon: loc.lon };
     await displayShelters(loc.lat, loc.lon, shelters);
 
     // Done loading
@@ -215,6 +234,8 @@
         navigator.geolocation.getCurrentPosition(async pos => {
             const lat = pos.coords.latitude;
             const lon = pos.coords.longitude;
+
+            userLocation = { lat, lon};
 
             map.setView([lat, lon], 13);
             await displayShelters(lat, lon);
@@ -260,17 +281,66 @@
 
         const item = document.createElement("div");
         item.className = "resultItem";
-        item.innerHTML = `<b>${i + 1}. ${s.name}</b><br>${s.distance_km} km away<br>Capacity: ${s.capacity}`;
+        item.innerHTML = `
+            <b>${i + 1}. ${s.name}</b><br>
+            ${s.distance_km} km away<br>
+            Capacity: ${s.capacity}<br>
+            <button class="directionsBtn">Get Directions</button>
+        `;
+
         item.onclick = () => {
             map.setView([s.lat, s.lon], 15);
             marker.openPopup();
         };
 
         panel.appendChild(item);
+
+        const btn = item.querySelector(".directionsBtn");
+        btn.onclick = (e) => {
+            e.stopPropagation(); // prevent triggering item.onclick
+
+        if (!userLocation) {
+            alert("No starting location available. Use search or 'Use My Location'.");
+            return;
+        }
+
+        routeToShelter(
+            userLocation.lat, userLocation.lon,
+            s.lat, s.lon
+        );
+    };
     });
 
     document.getElementById("loading").style.display = "none";
 }
+
+    async function routeToShelter(startLat, startLon, destLat, destLon) {
+    // Remove old route if one exists
+    if (currentRoute) {
+        map.removeLayer(currentRoute);
+        currentRoute = null;
+    }
+
+    const url =
+      `https://router.project-osrm.org/route/v1/driving/${startLon},${startLat};${destLon},${destLat}?overview=full&geometries=geojson`;
+
+    const res = await fetch(url);
+    const data = await res.json();
+
+    if (!data.routes || !data.routes.length) {
+        alert("Failed to load route.");
+        return;
+    }
+
+    const route = data.routes[0].geometry;
+
+    currentRoute = L.geoJSON(route, {
+        style: { color: "blue", weight: 5 }
+    }).addTo(map);
+
+    map.fitBounds(currentRoute.getBounds(), { padding: [50, 50] });
+}
+
 
 </script>
 
