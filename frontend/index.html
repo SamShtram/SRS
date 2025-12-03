@@ -227,7 +227,8 @@
         document.getElementById("loading").style.display = "block";
 
         if (!navigator.geolocation) {
-            alert("Geolocation not supported.");
+            alert("Geolocation not supported by your browser.");
+            document.getElementById("loading").style.display = "none";
             return;
         }
 
@@ -235,13 +236,31 @@
             const lat = pos.coords.latitude;
             const lon = pos.coords.longitude;
 
-            userLocation = { lat, lon};
+            console.log("REAL DEVICE LOCATION:", lat, lon);
 
-            map.setView([lat, lon], 13);
+        // Add "You Are Here" marker
+            if (window.userMarker) {
+                map.removeLayer(window.userMarker);
+            }
+
+            window.userMarker = L.marker([lat, lon], {
+                icon: L.icon({
+                    iconUrl: "https://cdn-icons-png.flaticon.com/512/684/684908.png",
+                    iconSize: [38, 38],
+                    iconAnchor: [19, 38],
+                    popupAnchor: [0, -35]
+                })
+            }).addTo(map);
+
+            window.userMarker.bindPopup(`<b>You Are Here</b>`).openPopup();
+
+        // Search nearby shelters
             await displayShelters(lat, lon);
 
+            document.getElementById("loading").style.display = "none";
+
         }, err => {
-            alert("Failed to get location.");
+            alert("Failed to get your real location. Permission denied?");
             console.error(err);
             document.getElementById("loading").style.display = "none";
         });
