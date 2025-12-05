@@ -1,5 +1,7 @@
 This is the Shelter Recognition System, IN the event of a weather emergency all you have to do is open the app and input your location to retrieve the 10 closest shelters to you
 
+
+WE WERE ONLY ABLE TO COLLECT DATA FOR THE MIDDLE ATLANTIC REGION OF THE UNITED STATES FOR THE SAKE OF A PROPER TEST SAMPLE. PROJECT CAN BE SCALED FOR THE ENTIRE WORLD!!!
 HOW TO RUN:
 
 CLONE THE REPOSITORY USING GITHUB VIRTUAL DESKTOP OR ANY TYPE OF COMMAND LINE INTERFACE. We used gitbash for this.
