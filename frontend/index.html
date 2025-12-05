@@ -7,18 +7,9 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 
     <style>
-        html, body {
-            height: 100%;
-            margin: 0;
-            overflow: hidden;
-        }
+        html, body { height: 100%; margin: 0; overflow: hidden; }
+        #map { width: 100%; height: 100%; }
 
-        #map {
-            width: 100%;
-            height: 100%;
-        }
-
-        /* Search box */
         #searchBox {
             position: absolute;
             top: 20px;
@@ -34,7 +25,6 @@
             gap: 8px;
             align-items: center;
         }
-
         #searchBox input {
             flex: 1;
             padding: 6px;
@@ -42,13 +32,6 @@
             outline: none;
             font-size: 14px;
         }
-
-        #searchBox button {
-            padding: 6px 10px;
-            cursor: pointer;
-        }
-
-        /* Use My Location button */
         #locateBtn {
             background: #0066ff;
             color: white;
@@ -57,12 +40,8 @@
             border-radius: 6px;
             cursor: pointer;
         }
+        #locateBtn:hover { background: #0050cc; }
 
-        #locateBtn:hover {
-            background: #0050cc;
-        }
-
-        /* Results sidebar */
         #resultsPanel {
             position: absolute;
             top: 100px;
@@ -84,12 +63,19 @@
             border-bottom: 1px solid #ddd;
             cursor: pointer;
         }
+        .resultItem:hover { background: #f0f0f0; }
 
-        .resultItem:hover {
-            background: #f0f0f0;
+        .directionsBtn {
+            margin-top: 6px;
+            padding: 5px 10px;
+            background: #0066ff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
         }
+        .directionsBtn:hover { background: #004dcc; }
 
-        /* Loading */
         #loading {
             position: absolute;
             top: 50%;
@@ -101,28 +87,12 @@
             z-index: 9999;
             display: none;
             font-size: 16px;
-            font-family: Arial;
         }
-
-        .directionsBtn {
-            margin-top: 6px;
-            padding: 5px 10px;
-            background: #0066ff;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-        }
-        .directionsBtn:hover {
-            background: #004dcc;
-        }
-
     </style>
 </head>
 
 <body>
 
-    <!-- Search UI -->
     <div id="searchBox">
         <input id="addressInput" type="text" placeholder="Search city or address..." />
         <button onclick="searchAddress()">Search</button>
@@ -137,232 +107,209 @@
 
     <script>
 
-        let userLocation = null;
         let currentRoute = null;
+        window.userLocation = null;
 
-    const shelterIcon = L.icon({
-        iconUrl: 'https://cdn-icons-png.flaticon.com/512/684/684908.png',
-        iconSize: [32, 32],
-        iconAnchor: [16, 32],
-        popupAnchor: [0, -28]
-    });
+        const shelterIcon = L.icon({
+            iconUrl: 'https://cdn-icons-png.flaticon.com/512/684/684908.png',
+            iconSize: [32, 32],
+            iconAnchor: [16, 32],
+            popupAnchor: [0, -28]
+        });
 
-    const map = L.map('map').setView([41.0, -75.0], 6);
+        const map = L.map('map').setView([41.0, -75.0], 6);
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19,
-        attribution: '&copy; OpenStreetMap contributors'
-    }).addTo(map);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(map);
 
-    let shelterMarkers = [];
+        let shelterMarkers = [];
 
-    function clearMarkers() {
-        shelterMarkers.forEach(m => map.removeLayer(m));
-        shelterMarkers = [];
-    }
-
-    async function geocode(address) {
-        const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}`;
-        const res = await fetch(url);
-        const data = await res.json();
-        if (!data.length) return null;
-        return { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
-    }
-
-    async function fetchShelters(lat, lon) {
-        const backendUrl = `http://127.0.0.1:8000/nearest?lat=${lat}&lon=${lon}&limit=10`;
-        console.log("Backend request:", backendUrl);
-
-        const response = await fetch(backendUrl);
-        if (!response.ok) {
-            console.error("Backend error:", await response.text());
-            alert("Backend error — check terminal.");
-            return null;
+        function clearMarkers() {
+            shelterMarkers.forEach(m => map.removeLayer(m));
+            shelterMarkers = [];
         }
 
-        return await response.json();
-    }
-
-    async function searchAddress() {
-    const address = document.getElementById("addressInput").value;
-    if (!address) return;
-
-    // Show loading popup
-    document.getElementById("loading").style.display = "block";
-
-    // Geocode with Nominatim
-    const loc = await geocode(address);
-    if (!loc) {
-        alert("Address not found.");
-        document.getElementById("loading").style.display = "none";
-        return;
-    }
-
-    // Build backend request
-    const backendUrl = `http://127.0.0.1:8000/nearest?lat=${loc.lat}&lon=${loc.lon}&limit=10`;
-    console.log("Backend request:", backendUrl);
-
-    // Fetch shelters from backend API
-    const response = await fetch(backendUrl);
-
-    if (!response.ok) {
-        console.error("Backend error:", await response.text());
-        alert("Backend error — check terminal.");
-        document.getElementById("loading").style.display = "none";
-        return;
-    }
-
-    const shelters = await response.json();
-
-    // Show results on map + sidebar
-    userLocation = { lat: loc.lat, lon: loc.lon };
-    await displayShelters(loc.lat, loc.lon, shelters);
-
-    // Done loading
-    document.getElementById("loading").style.display = "none";
-}
-
-
-    async function useMyLocation() {
-        document.getElementById("loading").style.display = "block";
-
-        if (!navigator.geolocation) {
-            alert("Geolocation not supported by your browser.");
-            document.getElementById("loading").style.display = "none";
-            return;
+        async function geocode(address) {
+            const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}`;
+            const res = await fetch(url);
+            const data = await res.json();
+            if (!data.length) return null;
+            return { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
         }
 
-        navigator.geolocation.getCurrentPosition(async pos => {
-            const lat = pos.coords.latitude;
-            const lon = pos.coords.longitude;
+        async function fetchShelters(lat, lon) {
+            const backendUrl = `http://127.0.0.1:8000/nearest?lat=${lat}&lon=${lon}&limit=10`;
+            console.log("Backend request:", backendUrl);
 
-            console.log("REAL DEVICE LOCATION:", lat, lon);
-
-        // Add "You Are Here" marker
-            if (window.userMarker) {
-                map.removeLayer(window.userMarker);
+            const response = await fetch(backendUrl);
+            if (!response.ok) {
+                console.error("Backend error:", await response.text());
+                alert("Backend error — check terminal.");
+                return null;
             }
 
-            window.userMarker = L.marker([lat, lon], {
-                icon: L.icon({
-                    iconUrl: "https://cdn-icons-png.flaticon.com/512/684/684908.png",
-                    iconSize: [38, 38],
-                    iconAnchor: [19, 38],
-                    popupAnchor: [0, -35]
-                })
-            }).addTo(map);
-
-            window.userMarker.bindPopup(`<b>You Are Here</b>`).openPopup();
-
-        // Search nearby shelters
-            await displayShelters(lat, lon);
-
-            document.getElementById("loading").style.display = "none";
-
-        }, err => {
-            alert("Failed to get your real location. Permission denied?");
-            console.error(err);
-            document.getElementById("loading").style.display = "none";
-        });
-    }
-
-    async function displayShelters(lat, lon, shelters = null) {
-
-    // If shelters were not provided, fetch them from backend
-    if (!shelters) {
-        shelters = await fetchShelters(lat, lon);
-    }
-
-    if (!shelters) {
-        document.getElementById("loading").style.display = "none";
-        return;
-    }
-
-    map.setView([lat, lon], 13);
-
-    clearMarkers();
-
-    const panel = document.getElementById("resultsPanel");
-    panel.innerHTML = "";
-    panel.style.display = "block";
-
-    shelters.forEach((s, i) => {
-        const marker = L.marker([s.lat, s.lon], { icon: shelterIcon }).addTo(map);
-
-        marker.bindPopup(`
-            <b>${s.name}</b><br>
-            Distance: ${s.distance_km} km<br>
-            Capacity: ${s.capacity}<br>
-            Risk Level: ${s.risk_level}
-        `);
-
-        shelterMarkers.push(marker);
-
-        const item = document.createElement("div");
-        item.className = "resultItem";
-        item.innerHTML = `
-            <b>${i + 1}. ${s.name}</b><br>
-            ${s.distance_km} km away<br>
-            Capacity: ${s.capacity}<br>
-            <button class="directionsBtn">Get Directions</button>
-        `;
-
-        item.onclick = () => {
-            map.setView([s.lat, s.lon], 15);
-            marker.openPopup();
-        };
-
-        panel.appendChild(item);
-
-        const btn = item.querySelector(".directionsBtn");
-        btn.onclick = (e) => {
-            e.stopPropagation(); // prevent triggering item.onclick
-
-        if (!userLocation) {
-            alert("No starting location available. Use search or 'Use My Location'.");
-            return;
+            return await response.json();
         }
 
-        routeToShelter(
-            userLocation.lat, userLocation.lon,
-            s.lat, s.lon
-        );
-    };
-    });
+        async function searchAddress() {
+            const address = document.getElementById("addressInput").value;
+            if (!address) return;
 
-    document.getElementById("loading").style.display = "none";
-}
+            document.getElementById("loading").style.display = "block";
 
-    async function routeToShelter(startLat, startLon, destLat, destLon) {
-    // Remove old route if one exists
-    if (currentRoute) {
-        map.removeLayer(currentRoute);
-        currentRoute = null;
-    }
+            const loc = await geocode(address);
+            if (!loc) {
+                alert("Address not found.");
+                document.getElementById("loading").style.display = "none";
+                return;
+            }
 
-    const url =
-      `https://router.project-osrm.org/route/v1/driving/${startLon},${startLat};${destLon},${destLat}?overview=full&geometries=geojson`;
+            const shelters = await fetchShelters(loc.lat, loc.lon);
 
-    const res = await fetch(url);
-    const data = await res.json();
+            window.userLocation = { lat: loc.lat, lon: loc.lon }; // set starting location
 
-    if (!data.routes || !data.routes.length) {
-        alert("Failed to load route.");
-        return;
-    }
+            await displayShelters(loc.lat, loc.lon, shelters);
 
-    const route = data.routes[0].geometry;
-
-    currentRoute = L.geoJSON(route, {
-        style: { color: "blue", weight: 5 }
-    }).addTo(map);
-
-    map.fitBounds(currentRoute.getBounds(), { padding: [50, 50] });
-}
+            document.getElementById("loading").style.display = "none";
+        }
 
 
-</script>
+        async function useMyLocation() {
+            document.getElementById("loading").style.display = "block";
 
+            if (!navigator.geolocation) {
+                alert("Geolocation not supported.");
+                document.getElementById("loading").style.display = "none";
+                return;
+            }
+
+            navigator.geolocation.getCurrentPosition(async pos => {
+                const lat = pos.coords.latitude;
+                const lon = pos.coords.longitude;
+
+                console.log("REAL DEVICE LOCATION:", lat, lon);
+
+                window.userLocation = { lat, lon };   // THIS is the only correct global variable
+
+                if (window.userMarker) map.removeLayer(window.userMarker);
+
+                window.userMarker = L.marker([lat, lon]).addTo(map);
+                window.userMarker.bindPopup(`<b>You Are Here</b>`).openPopup();
+
+                map.setView([lat, lon], 14);
+
+                await displayShelters(lat, lon);
+
+                document.getElementById("loading").style.display = "none";
+
+            }, async err => {
+
+            console.warn("Browser blocked geolocation — using IP fallback.");
+
+            // IP-based geolocation fallback
+            const data = await fetch("http://ip-api.com/json/").then(r => r.json());
+            const lat = data.lat;
+            const lon = data.lon;
+
+            window.userLocation = { lat, lon };
+            finishLocation(lat, lon);
+        });
+        }
+
+
+
+
+        async function displayShelters(lat, lon, shelters = null) {
+
+            if (!shelters) shelters = await fetchShelters(lat, lon);
+            if (!shelters) return;
+
+            clearMarkers();
+            map.setView([lat, lon], 13);
+
+            const panel = document.getElementById("resultsPanel");
+            panel.innerHTML = "";
+            panel.style.display = "block";
+
+            shelters.forEach((s, i) => {
+
+                const marker = L.marker([s.lat, s.lon], { icon: shelterIcon }).addTo(map);
+                marker.bindPopup(`
+                    <b>${s.name}</b><br>
+                    Distance: ${s.distance_km} km<br>
+                    Capacity: ${s.capacity}<br>
+                    Risk Level: ${s.risk_level}
+                `);
+
+                shelterMarkers.push(marker);
+
+                const item = document.createElement("div");
+                item.className = "resultItem";
+                item.innerHTML = `
+                    <b>${i + 1}. ${s.name}</b><br>
+                    ${s.distance_km} km away<br>
+                    Capacity: ${s.capacity}<br>
+                    <button class="directionsBtn">Get Directions</button>
+                `;
+
+                item.onclick = () => {
+                    map.setView([s.lat, s.lon], 15);
+                    marker.openPopup();
+                };
+
+                panel.appendChild(item);
+
+                const btn = item.querySelector(".directionsBtn");
+
+                btn.onclick = (e) => {
+                    e.stopPropagation();
+
+                    if (!window.userLocation) {
+                        alert("No starting location available. Use search or 'Use My Location'.");
+                        return;
+                    }
+
+                    routeToShelter(
+                        window.userLocation.lat,
+                        window.userLocation.lon,
+                        s.lat,
+                        s.lon
+                    );
+                };
+            });
+
+            document.getElementById("loading").style.display = "none";
+        }
+
+
+        async function routeToShelter(startLat, startLon, destLat, destLon) {
+
+            if (currentRoute) {
+                map.removeLayer(currentRoute);
+                currentRoute = null;
+            }
+
+            const url =
+              `https://router.project-osrm.org/route/v1/driving/${startLon},${startLat};${destLon},${destLat}?overview=full&geometries=geojson`;
+
+            const res = await fetch(url);
+            const data = await res.json();
+
+            if (!data.routes || !data.routes.length) {
+                alert("Failed to load route.");
+                return;
+            }
+
+            currentRoute = L.geoJSON(data.routes[0].geometry, {
+                style: { color: "blue", weight: 5 }
+            }).addTo(map);
+
+            map.fitBounds(currentRoute.getBounds(), { padding: [50, 50] });
+        }
+
+    </script>
 
 </body>
 </html>
